@@ -1,0 +1,126 @@
+# basic orchestrating the Cloud with Kubernetes
+# just code
+
+Enter google cloud shell
+
+(SET THE ZON)
+gcloud config set compute/zone us-central1-b
+
+
+(START UP A CLUSTER)
+gcloud container clusters create io
+
+
+(GET SAMPLE CODE)
+gsutil cp -r gs://spls/gsp021/* .
+cd orchestrate-with-kubernetes/kubernetes
+
+
+(CREATE KUBERNETES)
+kubectl create deployment nginx --image=nginx:1.10.0 (WITH NGINX CONTAINER)
+
+
+(VIEW RUNNING CONTAINER) --> In Kubernetes, all containers run in a pod
+kubectl get pods
+
+
+(EXPOSE NGINX CONTAINER OUTSIDE OF KUBERNETES)
+kubectl expose deployment nginx --port 80 --type LoadBalancer
+
+
+(VIEW LIST OF SERVICES)
+kubectl get services
+
+
+## (CREATE PODS)
+cd ~/orchestrate-with-kubernetes/kubernetes (GO TO DIRECTORY)
+cat pods/monolith.yaml                      (CHECK YAML FILE)
+kubectl create -f pods/monolith.yaml        (CREATE MONLITH POD)
+
+
+(VIEW LIST OF PODS)
+kubectl get pods
+
+
+(GET INFORMATION ABOUT THE MONLITH POD)
+kubectl describe pods monolith
+
+
+(CHECK INTERACTION)
+In the 2nd terminal
+kubectl port-forward monolith 10080:80
+
+In the 1st terminal
+curl http://127.0.0.1:10080
+
+######################################################################
+chck secure endpoint
+curl http://127.0.0.1:10080/secure
+
+try login
+curl -u user http://127.0.0.1:10080/login
+TOKEN=$(curl http://127.0.0.1:10080/login -u user|jq -r '.token')
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:10080/secure
+#######################################################################
+
+(VIEW THE LOGS FOR THE MONOLITH POD)
+kubectl logs monolith
+(In real time monitoring)
+kubectl logs -f monolith
+
+
+(VIEW INSIDE OF MONOLITH POD)
+kubectl exec monolith --stdin --tty -c monolith -- /bin/sh
+(CEHCK PING)
+ping -c 3 google.com
+
+
+## (CREATE A SERVICE)
+cd ~/orchestrate-with-kubernetes/kubernetes  <-- go to directory
+cat pods/secure-monolith.yaml                <-- check seure yaml file
+
+(CREATE THE SECURE-MONOLITH PODS)
+kubectl create secret generic tls-certs --from-file tls/
+kubectl create configmap nginx-proxy-conf --from-file nginx/proxy.conf
+kubectl create -f pods/secure-monolith.yaml
+
+
+cat services/monolith.yaml   <-- check service config file
+kubectl create -f services/monolith.yaml   <-- create service
+
+
+(SET FIREWALL-RULES)
+gcloud compute firewall-rules create allow-monolith-nodeport \
+  --allow=tcp:31000
+  
+
+## (ADD LABELS TO PODS)
+kubectl get pods -l "app=monolith"    <-- CHECK RUNNING PODS WITH THE MONOLITH LABEL
+
+(ADD LABEL IN SECURE-MONOLITH AND UPDATE)
+kubectl label pods secure-monolith 'secure=enabled'
+kubectl get pods secure-monolith --show-labels
+
+
+(VIEW THE LIST OF ENDPOINTS ON THE MONOLITH SERVICE)
+kubectl describe services monolith | grep Endpoints
+
+
+
+## (CREATE DEPLOYMENTS)
+cat deployments/auth.yaml <-- check deployment yaml file
+kubectl create -f deployments/auth.yaml
+kubectl create -f services/auth.yaml
+
+kubectl create -f deployments/hello.yaml
+kubectl create -f services/hello.yaml
+
+
+(CREATE AND EXPOSE THE FRONTEND DEPLOYMENT)
+kubectl create configmap nginx-frontend-conf --from-file=nginx/frontend.conf
+kubectl create -f deployments/frontend.yaml
+kubectl create -f services/frontend.yaml
+
+kubectl get services frontend
+
+
