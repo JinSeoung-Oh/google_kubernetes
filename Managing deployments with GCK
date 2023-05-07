@@ -1,0 +1,124 @@
+# basic
+# just code
+
+# Enter google gloud console
+
+(SET THE ZON)
+gcloud config set compute/zone us-west3-b
+
+
+(GET SAMPLE CODE)
+gsutil -m cp -r gs://spls/gsp053/orchestrate-with-kubernetes .
+cd orchestrate-with-kubernetes/kubernetes
+
+
+(CREATE A CLUSTER WITH 3 NODES)
+gcloud container clusters create bootcamp \
+  --machine-type e2-small \
+  --num-nodes 3 \
+  --scopes "https://www.googleapis.com/auth/projecthosting,storage-rw"
+  
+ 
+(DEPLOYMENT OBJECT)
+kubectl explain deployment                    (VIEW DEPLOYMENT OBJECT)
+kubectl explain deployment --recursive        (SEE ALL OF THE FIELDS OF DEPLYMENT OBJECT)
+kubectl explain deployment.metadata.name      (VIEW THE STRUCTURE OF A DEPLOYMENT OBJECT)
+
+
+(CREATE A DEPLOYMENT)
+vi deployments/auth.yaml                      (vim deployments file)
+cat deployments/auth.yaml
+
+kubectl create -f deployments/auth.yaml       (CREATE DEPLOYMENTS)
+kubectl get deployments                       (GET DEPLOYMENTS)
+kubectl get replicasets                       (GET REPLICASETS)
+kubectl get pods                              (GET PODS)
+
+
+(CREATE SERVICE)
+kubectl create -f services/auth.yaml
+
+kubectl create -f deployments/hello.yaml      
+kubectl create -f services/hello.yaml
+
+kubectl create secret generic tls-certs --from-file tls/
+kubectl create configmap nginx-frontend-conf --from-file=nginx/frontend.conf
+kubectl create -f deployments/frontend.yaml
+kubectl create -f services/frontend.yaml
+
+kubectl get services frontend                (GET SERVICE FRONTED)
+
+curl -ks https://`kubectl get svc frontend -o=jsonpath="{.status.loadBalancer.ingress[0].ip}"`  (CHECK OUTPUT)
+
+
+(SCALE A DEPLOYMENT)
+kubectl explain deployment.spec.replicas     (VIEW REPLICAS)
+kubectl scale deployment hello --replicas=5  (SCALE)
+kubectl get pods | grep hello- | wc -l       (CHECK SCALE)
+
+
+(ROLLING UPDATE)
+kubectl edit deployment hello                (EDIT FOR UPDATE)
+kubectl get replicaset                       (CREATE WITH NEW EDITED)
+kubectl rollout history deployment/hello     (VIEW HISTORY)
+
+
+(PAUSE A ROLLING UPDATE)
+kubectl rollout pause deployment/hello
+kubectl rollout status deployment/hello      (VIEW STATUS)
+kubectl get pods -o jsonpath --template='{range .items[*]}{.metadata.name}{"\t"}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+
+
+(RESUME A ROLLING UPDATE)
+** The rollout is paused which means that some pods are at the new version and some pods are at the older version.
+kubectl rollout resume deployment/hello
+kubectl rollout status deployment/hello
+
+
+(ROLLBACK AN UPDATE)
+kubectl rollout undo deployment/hello       (ROLL BACK TO THE PREVIOUS VERSION)
+kubectl rollout history deployment/hello
+kubectl get pods -o jsonpath --template='{range .items[*]}{.metadata.name}{"\t"}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+
+
+(CANRY DEPLOYMENTS)
+** When you want to test a new deployment in production with a subset of your users, use a canary deployment. 
+Canary deployments allow you to release a change to a small subset of your users to mitigate risk associated with new releases.
+
+cat deployments/hello-canary.yaml                    (CREATE A NEW CANRY DEPLOYMENT FOR THE NEW VERSION)
+kubectl create -f deployments/hello-canary.yaml      (CREATE THE CANARY DEPLOYMENTS
+kubectl get deployments                              (GET DEPLOYMENTS)
+curl -ks https://`kubectl get svc frontend -o=jsonpath="{.status.loadBalancer.ingress[0].ip}"`/version
+
+
+** SessionAffinity
+This way the same user will always be served from the same version
+
+ex)
+kind: Service
+apiVersion: v1
+metadata:
+  name: "hello"
+spec:
+  sessionAffinity: ClientIP
+  selector:
+    app: "hello"
+  ports:
+    - protocol: "TCP"
+      port: 80
+      targetPort: 80
+      
+      
+(BULE-GREEN DEPLOYMENTS)
+* one for the old "blue" version and one for the new "green" version
+kubectl apply -f services/hello-blue.yaml          (UPDATE THE SERVICE FOR BULE DEPLOYMENT)
+kubectl create -f deployments/hello-green.yaml     (CREATE GREEN DEPLOYMENT)
+
+curl -ks https://`kubectl get svc frontend -o=jsonpath="{.status.loadBalancer.ingress[0].ip}"`/version
+
+kubectl apply -f services/hello-green.yaml        (UPDATE THE SERVICE FOR GREEN DEPLOYMENT)
+curl -ks https://`kubectl get svc frontend -o=jsonpath="{.status.loadBalancer.ingress[0].ip}"`/version
+
+
+(BULE-GREEN ROLLBACK)
+kubectl apply -f services/hello-blue.yaml         (While the "blue" deployment is still running, just update the service back to the old version)
