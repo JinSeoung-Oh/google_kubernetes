@@ -1,0 +1,114 @@
+##  Kubernetes - a powerful cluster manager and orchestration system for containers. 
+Kubernetes is an open source project that can run on many different environments—from laptops to high-availability multi-node clusters; 
+from virtual machines to bare metal. As mentioned before, Kubernetes apps are built on containers
+
+
+##  Jenkins is an open-source automation server that lets you flexibly orchestrate your build, test, and deployment pipelines
+
+## Just code
+## Enter google cloud conslo
+
+Downloads the source code
+gcloud config set compute/zone us-central1-a
+gsutil cp gs://spls/gsp051/continuous-deployment-on-kubernetes.zip .
+unzip continuous-deployment-on-kubernetes.zip
+cd continuous-deployment-on-kubernetes
+
+
+## Provisioning Jenkins
+1. Creating a Kubernetes cluster
+gcloud container clusters create jenkins-cd \
+--num-nodes 2 \
+--machine-type n1-standard-2 \
+--scopes "https://www.googleapis.com/auth/source.read_write,cloud-platform"
+
+gcloud container clusters list
+gcloud container clusters get-credentials jenkins-cd
+kubectl cluster-info
+
+
+## Setup Helm
+helm repo add jenkins https://charts.jenkins.io
+helm repo update
+
+
+## configure and install jenkins
+helm install cd jenkins/jenkins -f jenkins/values.yaml --wait
+kubectl get pods
+# Configure the Jenkins service account to be able to deploy to the cluster
+kubectl create clusterrolebinding jenkins-deploy --clusterrole=cluster-admin --serviceaccount=default:cd-jenkins
+
+export POD_NAME=$(kubectl get pods --namespace default -l "app.kubernetes.io/component=jenkins-master" -l "app.kubernetes.io/instance=cd" -o jsonpath="{.items[0].metadata.name}")
+kubectl port-forward $POD_NAME 8080:8080 >> /dev/null &
+kubectl get svc
+
+
+##  Connect to Jenkins
+printf $(kubectl get secret cd-jenkins -o jsonpath="{.data.jenkins-admin-password}" | base64 --decode);echo
+
+
+##  Deploying Application
+cd sample-app
+kubectl create ns production
+kubectl apply -f k8s/production -n production
+kubectl apply -f k8s/canary -n production
+kubectl apply -f k8s/services -n production
+
+
+kubectl scale deployment gceme-frontend-production -n production --replicas 4
+kubectl get pods -n production -l app=gceme -l role=frontend
+kubectl get pods -n production -l app=gceme -l role=backend
+kubectl get service gceme-frontend -n production
+
+
+# store fronted service with load balancer
+export FRONTEND_SERVICE_IP=$(kubectl get -o jsonpath="{.status.loadBalancer.ingress[0].ip}" --namespace=production services gceme-frontend)
+curl http://$FRONTEND_SERVICE_IP/version
+
+
+## Create the jenkins pipeline
+gcloud source repos create default
+git init
+git config credential.helper gcloud.sh
+git remote add origin https://source.developers.google.com/p/$DEVSHELL_PROJECT_ID/r/default
+git config --global user.email "[EMAIL_ADDRESS]"
+git config --global user.name "[USERNAME]"
+git add .
+git commit -m "Initial commit"
+git push origin master
+
+
+##  Creating the Jenkins Job
+Serching in google
+
+
+##  Creating the devleopment environment
+git checkout -b new-feature (development branch)
+
+
+##  Kick off Depolyment
+git add Jenkinsfile html.go main.go
+git commit -m "Version 2.0.0"
+git push origin new-feature
+
+kubectl proxy &
+curl \
+http://localhost:8001/api/v1/namespaces/new-feature/services/gceme-frontend:80/proxy/version
+
+
+## Deploying a canary release
+git checkout -b canary
+git push origin canary
+export FRONTEND_SERVICE_IP=$(kubectl get -o \
+jsonpath="{.status.loadBalancer.ingress[0].ip}" --namespace=production services gceme-frontend)
+while true; do curl http://$FRONTEND_SERVICE_IP/version; sleep 1; done
+
+
+## Depolying to production
+git checkout master
+git merge canary
+git push origin master
+export FRONTEND_SERVICE_IP=$(kubectl get -o \
+jsonpath="{.status.loadBalancer.ingress[0].ip}" --namespace=production services gceme-frontend)
+while true; do curl http://$FRONTEND_SERVICE_IP/version; sleep 1; done
+kubectl get service gceme-frontend -n production
