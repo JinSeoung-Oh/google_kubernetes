@@ -7,6 +7,8 @@ from virtual machines to bare metal. As mentioned before, Kubernetes apps are bu
 
 ## Just code
 ## Enter google cloud conslo
+## Check gceme (Application)
+
 
 Downloads the source code
 gcloud config set compute/zone us-central1-a
